@@ -20,6 +20,9 @@ namespace eventorientation
         Event[] Replay(params Type[] eventTypes);
         Event[] Replay(long firstEventNumber, params Type[] eventTypes);
 
+        (Version version, ContextualEvent[] events) ReplayContext(string contextId);
+        (Version version, ContextualEvent[] events) ReplayContext(long firstEventNumber, string contextId);
+
         (Version[] versions, Event[] events) ReplayWithVersion(Func<Event,string> mapToVersionId, params Type[] eventTypes);
         (Version[] versions, Event[] events) ReplayWithVersion(long firstEventNumber, Func<Event,string> mapToVersionId, params Type[] eventTypes);
     }
@@ -29,6 +32,10 @@ namespace eventorientation
         public string EventId { get; set; }
 
         protected Event() { EventId = Guid.NewGuid().ToString(); }
+    }
+
+    public abstract class ContextualEvent : Event {
+        public string ContextId;
     }
 
 
@@ -95,21 +102,32 @@ namespace eventorientation
         public Event[] Replay(long firstEventNumber, params Type[] eventTypes)
             => _lock.TryRead(() => {
                     var allEvents = AllEvents(firstEventNumber);
-                    return Filter(allEvents, eventTypes).ToArray();
+                    return Filter_by_type(allEvents, eventTypes).ToArray();
                 });
 
 
+        public (Version version, ContextualEvent[] events) ReplayContext(string contextId) => ReplayContext(-1, contextId);
+
+        public (Version version, ContextualEvent[] events) ReplayContext(long firstEventNumber, string contextId) {
+            return _lock.TryRead<(Version,ContextualEvent[])>(() => {
+                var contextEvents = AllEvents(firstEventNumber).Where(e => e is ContextualEvent)
+                                                               .OfType<ContextualEvent>()
+                                                               .Where(e => e.ContextId == contextId)
+                                                               .ToArray();
+                return (_vers[contextId], contextEvents);
+            });
+        }
+
+        
         public (Version[] versions, Event[] events) ReplayWithVersion(Func<Event, string> mapToVersionId, params Type[] eventTypes)
             => ReplayWithVersion(-1, mapToVersionId, eventTypes);
         public (Version[] versions, Event[] events) ReplayWithVersion(long firstEventNumber, Func<Event, string> mapToVersionId, params Type[] eventTypes) {
-            Version[] versions = new Version[0];
-            var events = _lock.TryRead(() => {
+            return _lock.TryRead(() => {
                 var allEvents = AllEvents(firstEventNumber);
-                var filteredEvents = Filter(allEvents, eventTypes).ToArray();
-                versions = Retrieve_versions(filteredEvents).ToArray();
-                return filteredEvents;
+                var filteredEvents = Filter_by_type(allEvents, eventTypes).ToArray();
+                var versions = Retrieve_versions(filteredEvents).ToArray();
+                return (versions, filteredEvents);
             });
-            return (versions, events);
 
 
             IEnumerable<Version> Retrieve_versions(IEnumerable<Event> events) {
@@ -131,7 +149,7 @@ namespace eventorientation
                 yield return _repo.Load(i);
         }
 
-        private IEnumerable<Event> Filter(IEnumerable<Event> events, Type[] eventTypes) {
+        private IEnumerable<Event> Filter_by_type(IEnumerable<Event> events, Type[] eventTypes) {
             if (eventTypes.Length <= 0) return events;
                 
             var eventTypes_ = new HashSet<Type>(eventTypes);

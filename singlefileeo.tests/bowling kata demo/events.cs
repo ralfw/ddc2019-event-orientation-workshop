@@ -1,13 +1,13 @@
 namespace eventorientation.tests.bowling_kata_demo
 {
-    public class Rolled : Event {
+    public class Rolled : ContextualEvent {
         public int Pins;
     }
 
-    public class FrameFinished : Event {
+    public class FrameCompleted : ContextualEvent {
         public int Total;
     }
     
-    public class SpareAchieved : Event {}
-    public class StrikeAchieved : Event {}
+    public class SpareBonusEarned : ContextualEvent {}
+    public class StrikeBonusEarned : ContextualEvent {}
 }

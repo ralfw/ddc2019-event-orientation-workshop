@@ -9,5 +9,6 @@ namespace eventorientation.tests.bowling_kata_demo
     }
     
     public class SpareBonusEarned : ContextualEvent {}
+
     public class StrikeBonusEarned : ContextualEvent {}
 }
